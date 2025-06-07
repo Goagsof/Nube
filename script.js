@@ -1,16 +1,17 @@
-// La IP del servidor Python.
-// Si el servidor Python se ejecuta en tu PC en el puerto 8000 y el JS se sirve desde el mismo PC,
-// 'window.location.origin' es la forma más segura de obtener la base URL.
-// Si accedes desde el celular, tu celular debe acceder a la IP de tu PC, por ejemplo, http://192.168.0.14:8000
-const serverIp = window.location.origin; // O puedes poner "http://192.168.0.14:8000" si accedes desde otra máquina/celular
+// The IP address of your Python server on your local network.
+// This is critical when your frontend is hosted on a different domain (like GitHub Pages)
+// and your backend is running locally on your PC.
+// Replace "192.168.0.14" with your actual PC's local IPv4 address if it has changed.
+// The port "5500" should match the port your Python server is running on.
+const serverIp = "http://192.168.0.14:5500"; 
 
-// Función para cargar y mostrar archivos desde el servidor
+// Function to load and display files from the server
 async function loadGalleryImages() {
   try {
-    // El endpoint para listar archivos en Python será algo como /list-files
+    // The endpoint to list files on the Python server is /list-files
     const response = await fetch(`${serverIp}/list-files`);
     if (!response.ok) {
-      throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
+      throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
     }
     const files = await response.json();
 
@@ -74,7 +75,7 @@ $("#uploadForm").on("submit", async function (e) {
     return;
   }
 
-  $("#gallery").empty(); // Limpiar la galería antes de las previsualizaciones
+  $("#gallery").empty(); // Clear the gallery before previews
   for (const file of files) {
     const reader = new FileReader();
 
@@ -94,13 +95,12 @@ $("#uploadForm").on("submit", async function (e) {
 
   const formData = new FormData();
   for (let i = 0; i < files.length; i++) {
-    // El nombre del campo "files" debe coincidir con cómo el servidor Python espera los archivos
-    // Flask/FastAPI suelen esperar 'file' o 'files'
+    // The field name "files" must match how the Python server expects the files
     formData.append("files", files[i]);
   }
 
   try {
-    // El endpoint para subir archivos en Python será algo como /upload-files
+    // The endpoint to upload files on the Python server is /upload-files
     const response = await fetch(`${serverIp}/upload-files`, {
       method: "POST",
       body: formData,
@@ -108,14 +108,14 @@ $("#uploadForm").on("submit", async function (e) {
 
     if (response.ok) {
       const result = await response.json();
-      console.log("Subida completada:", result.message);
+      console.log("Upload completed:", result.message);
 
       if (result.uploaded && result.uploaded.length > 0) {
-        console.log("Archivos subidos exitosamente:", result.uploaded);
+        console.log("Files uploaded successfully:", result.uploaded);
         alert(`Archivos subidos: ${result.uploaded.join(', ')}`);
       }
       if (result.failed && result.failed.length > 0) {
-        console.error("Archivos que fallaron al subir:", result.failed);
+        console.error("Files that failed to upload:", result.failed);
         alert(`Hubo problemas al subir los siguientes archivos: ${result.failed.join(', ')}`);
       }
 
@@ -123,11 +123,11 @@ $("#uploadForm").on("submit", async function (e) {
 
     } else {
       const errorText = await response.text();
-      console.error(`Error al subir archivos (HTTP ${response.status}):`, errorText);
+      console.error(`Error uploading files (HTTP ${response.status}):`, errorText);
       alert(`Error al subir archivos: ${errorText}`);
     }
   } catch (error) {
-    console.error("Fallo de conexión con el servidor:", error);
+    console.error("Connection to server failed:", error);
     alert("No se pudo conectar con el servidor. Asegúrate que el servidor Python esté encendido y la IP sea correcta.");
   }
 });
