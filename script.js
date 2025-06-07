@@ -1,4 +1,69 @@
-const serverIp = "http://192.168.1.5:5134"; // Asegurate que este puerto sea el correcto del servidor
+// La IP del servidor Python.
+// Si el servidor Python se ejecuta en tu PC en el puerto 8000 y el JS se sirve desde el mismo PC,
+// 'window.location.origin' es la forma más segura de obtener la base URL.
+// Si accedes desde el celular, tu celular debe acceder a la IP de tu PC, por ejemplo, http://192.168.0.14:8000
+const serverIp = window.location.origin; // O puedes poner "http://192.168.0.14:8000" si accedes desde otra máquina/celular
+
+// Función para cargar y mostrar archivos desde el servidor
+async function loadGalleryImages() {
+  try {
+    // El endpoint para listar archivos en Python será algo como /list-files
+    const response = await fetch(`${serverIp}/list-files`);
+    if (!response.ok) {
+      throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
+    }
+    const files = await response.json();
+
+    const gallery = $("#gallery");
+    gallery.empty();
+
+    if (files.length === 0) {
+      gallery.append('<p class="text-center text-muted">No hay fotos o videos subidos aún.</p>');
+      return;
+    }
+
+    files.forEach(fileName => {
+      const ext = fileName.split('.').pop().toLowerCase();
+      let tag;
+      let isMedia = true;
+
+      switch (ext) {
+        case 'jpg':
+        case 'jpeg':
+        case 'png':
+        case 'gif':
+        case 'webp':
+          tag = 'img';
+          break;
+        case 'mp4':
+        case 'mov':
+        case 'avi':
+          tag = 'video';
+          break;
+        default:
+          isMedia = false;
+          break;
+      }
+
+      if (isMedia) {
+        const content = `
+          <div class="col-6 col-md-4">
+            <${tag} src="${serverIp}/uploads/${fileName}" controls class="w-100"></${tag}>
+            <p class="text-center text-muted small mt-1">${fileName}</p>
+          </div>
+        `;
+        gallery.append(content);
+      } else {
+        console.log(`Archivo no multimedia o extensión no soportada para previsualización: ${fileName}`);
+      }
+    });
+
+  } catch (error) {
+    console.error("Fallo al cargar archivos desde el servidor:", error);
+    $("#gallery").html('<p class="text-center text-danger">No se pudo conectar con el servidor para cargar la galería. Asegúrate que el servidor Python esté encendido y la IP sea correcta.</p>');
+  }
+}
+
 
 $("#uploadForm").on("submit", async function (e) {
   e.preventDefault();
@@ -9,8 +74,8 @@ $("#uploadForm").on("submit", async function (e) {
     return;
   }
 
+  $("#gallery").empty(); // Limpiar la galería antes de las previsualizaciones
   for (const file of files) {
-    // Crear la vista previa
     const reader = new FileReader();
 
     reader.onload = function (e) {
@@ -18,32 +83,55 @@ $("#uploadForm").on("submit", async function (e) {
       const content = `
         <div class="col-6 col-md-4">
           <${ext} src="${e.target.result}" controls class="w-100"></${ext}>
+          <p class="text-center text-muted small mt-1">Previsualización: ${file.name}</p>
         </div>
       `;
       $("#gallery").append(content);
     };
 
     reader.readAsDataURL(file);
-
-    // Subida al servidor ASP.NET
-    const formData = new FormData();
-    formData.append("files", file);
-
-    try {
-      const response = await fetch(`${serverIp}/Upload/upload`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (response.ok) {
-        console.log(`${file.name} subido correctamente`);
-      } else {
-        console.error(`Error al subir ${file.name}:`, await response.text());
-        alert(`Error al subir ${file.name}`);
-      }
-    } catch (error) {
-      console.error("Fallo de conexión con el servidor:", error);
-      alert("No se pudo conectar con el servidor. Asegurate que esté encendido.");
-    }
   }
+
+  const formData = new FormData();
+  for (let i = 0; i < files.length; i++) {
+    // El nombre del campo "files" debe coincidir con cómo el servidor Python espera los archivos
+    // Flask/FastAPI suelen esperar 'file' o 'files'
+    formData.append("files", files[i]);
+  }
+
+  try {
+    // El endpoint para subir archivos en Python será algo como /upload-files
+    const response = await fetch(`${serverIp}/upload-files`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log("Subida completada:", result.message);
+
+      if (result.uploaded && result.uploaded.length > 0) {
+        console.log("Archivos subidos exitosamente:", result.uploaded);
+        alert(`Archivos subidos: ${result.uploaded.join(', ')}`);
+      }
+      if (result.failed && result.failed.length > 0) {
+        console.error("Archivos que fallaron al subir:", result.failed);
+        alert(`Hubo problemas al subir los siguientes archivos: ${result.failed.join(', ')}`);
+      }
+
+      await loadGalleryImages();
+
+    } else {
+      const errorText = await response.text();
+      console.error(`Error al subir archivos (HTTP ${response.status}):`, errorText);
+      alert(`Error al subir archivos: ${errorText}`);
+    }
+  } catch (error) {
+    console.error("Fallo de conexión con el servidor:", error);
+    alert("No se pudo conectar con el servidor. Asegúrate que el servidor Python esté encendido y la IP sea correcta.");
+  }
+});
+
+$(document).ready(function() {
+  loadGalleryImages();
 });
