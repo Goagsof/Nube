@@ -1,17 +1,14 @@
-// The IP address of your Python server on your local network.
-// This is critical when your frontend is hosted on a different domain (like GitHub Pages)
-// and your backend is running locally on your PC.
-// Replace "192.168.0.14" with your actual PC's local IPv4 address if it has changed.
-// The port "5500" should match the port your Python server is running on.
-const serverIp = "http://192.168.0.14:5500"; 
+// La IP del servidor Python.
+// ¡Asegúrate que este puerto y las rutas coincidan con tu server.py!
+const serverIp = "http://192.168.0.14:5000"; // <--- CAMBIADO: Puerto a 5000
 
-// Function to load and display files from the server
+// Función para cargar y mostrar archivos desde el servidor
 async function loadGalleryImages() {
   try {
-    // The endpoint to list files on the Python server is /list-files
-    const response = await fetch(`${serverIp}/list-files`);
+    // CAMBIADO: La ruta para listar ahora es /Upload/list
+    const response = await fetch(`${serverIp}/Upload/list`);
     if (!response.ok) {
-      throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
+      throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
     }
     const files = await response.json();
 
@@ -49,8 +46,7 @@ async function loadGalleryImages() {
       if (isMedia) {
         const content = `
           <div class="col-6 col-md-4">
-            <${tag} src="${serverIp}/uploads/${fileName}" controls class="w-100"></${tag}>
-            <p class="text-center text-muted small mt-1">${fileName}</p>
+            <${tag} src="${serverIp}/Upload/files/${fileName}" controls class="w-100"></${tag}> <p class="text-center text-muted small mt-1">${fileName}</p>
           </div>
         `;
         gallery.append(content);
@@ -75,7 +71,7 @@ $("#uploadForm").on("submit", async function (e) {
     return;
   }
 
-  $("#gallery").empty(); // Clear the gallery before previews
+  $("#gallery").empty(); // Limpiar la galería antes de las previsualizaciones
   for (const file of files) {
     const reader = new FileReader();
 
@@ -95,27 +91,26 @@ $("#uploadForm").on("submit", async function (e) {
 
   const formData = new FormData();
   for (let i = 0; i < files.length; i++) {
-    // The field name "files" must match how the Python server expects the files
     formData.append("files", files[i]);
   }
 
   try {
-    // The endpoint to upload files on the Python server is /upload-files
-    const response = await fetch(`${serverIp}/upload-files`, {
+    // CAMBIADO: La ruta para subir ahora es /uploadMultiple
+    const response = await fetch(`${serverIp}/uploadMultiple`, {
       method: "POST",
       body: formData,
     });
 
     if (response.ok) {
       const result = await response.json();
-      console.log("Upload completed:", result.message);
+      console.log("Subida completada:", result.message);
 
       if (result.uploaded && result.uploaded.length > 0) {
-        console.log("Files uploaded successfully:", result.uploaded);
+        console.log("Archivos subidos exitosamente:", result.uploaded);
         alert(`Archivos subidos: ${result.uploaded.join(', ')}`);
       }
       if (result.failed && result.failed.length > 0) {
-        console.error("Files that failed to upload:", result.failed);
+        console.error("Archivos que fallaron al subir:", result.failed);
         alert(`Hubo problemas al subir los siguientes archivos: ${result.failed.join(', ')}`);
       }
 
@@ -123,11 +118,11 @@ $("#uploadForm").on("submit", async function (e) {
 
     } else {
       const errorText = await response.text();
-      console.error(`Error uploading files (HTTP ${response.status}):`, errorText);
+      console.error(`Error al subir archivos (HTTP ${response.status}):`, errorText);
       alert(`Error al subir archivos: ${errorText}`);
     }
   } catch (error) {
-    console.error("Connection to server failed:", error);
+    console.error("Fallo de conexión con el servidor:", error);
     alert("No se pudo conectar con el servidor. Asegúrate que el servidor Python esté encendido y la IP sea correcta.");
   }
 });
