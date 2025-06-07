@@ -1,111 +1,136 @@
-from flask import Flask, request, send_from_directory, render_template_string
 import os
+from flask import Flask, request, jsonify, send_from_directory
+from werkzeug.utils import secure_filename
 import uuid
-import datetime
+from flask_cors import CORS # Necesario para permitir solicitudes desde GitHub Pages
 
-# Inicializa la aplicación Flask
-app = Flask(__name__, static_folder='.', static_url_path='') # Servir archivos estáticos desde la carpeta actual
+app = Flask(__name__) # Inicializa la aplicación Flask
+CORS(app) # Habilita CORS para todas las rutas. ¡Esto es crucial para GitHub Pages!
 
-# Directorio donde se guardarán los archivos subidos
-# Esto se resolverá dentro de la misma carpeta donde está server.py
+# Define la carpeta donde se guardarán los archivos subidos.
+# Crea la carpeta 'uploads' si no existe.
 UPLOAD_FOLDER = 'uploads'
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER) # Crea la carpeta 'uploads' si no existe
+# Obtén la ruta absoluta de la carpeta 'Nube' donde está server.py
+base_dir = os.path.dirname(os.path.abspath(__file__))
+full_upload_path = os.path.join(base_dir, UPLOAD_FOLDER)
 
-# -----------------------------------------------------------
-# Ruta principal para servir tu index.html
-# Cuando alguien acceda a http://<tu_ip>:5000/
-# -----------------------------------------------------------
-@app.route('/')
-def serve_index():
-    # Asume que index.html está en la misma carpeta que server.py
-    # Flask buscará index.html en su 'static_folder'
-    return send_from_directory(app.static_folder, 'index.html')
+if not os.path.exists(full_upload_path):
+    os.makedirs(full_upload_path)
+app.config['UPLOAD_FOLDER'] = full_upload_path # Configura la ruta de subida en Flask
 
-# -----------------------------------------------------------
-# Endpoint para subir múltiples archivos
-# El frontend POSTeará a http://<tu_ip>:5000/uploadMultiple
-# -----------------------------------------------------------
-@app.route('/uploadMultiple', methods=['POST'])
-def upload_multiple_files():
+# Tipos de archivo permitidos para la validación (opcional)
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'mov', 'avi'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# --- RUTAS DE LA API ---
+
+# RUTA: Para subir MÚLTIPLES archivos (ENDPOINT: /upload-files)
+@app.route('/upload-files', methods=['POST'])
+def upload_files():
+    print(f"[{os.path.basename(__file__)} {os.getenv('FLASK_ENV', 'development')}] Received POST /upload-files request.")
+
     if 'files' not in request.files:
-        return {'message': 'No se encontró la parte de archivos en la solicitud.'}, 400
+        print(f"[{os.path.basename(__file__)}] No 'files' key in request.files.")
+        return jsonify({"message": "No se encontraron archivos en la solicitud."}), 400
 
-    files = request.files.getlist('files') # 'files' debe coincidir con formData.append("files", ...) en JS
-
+    files = request.files.getlist('files')
     if not files:
-        return {'message': 'No se seleccionaron archivos para subir.'}, 400
+        print(f"[{os.path.basename(__file__)}] No files selected for upload (empty list).")
+        return jsonify({"message": "No se seleccionaron archivos para subir."}), 400
 
     uploaded_file_names = []
     failed_file_names = []
 
     for file in files:
         if file.filename == '':
-            failed_file_names.append("Archivo desconocido (nombre vacío)")
+            failed_file_names.append("Archivo desconocido (vacío)")
+            print(f"[{os.path.basename(__file__)}] Empty filename detected.")
             continue
 
-        # Generar un nombre de archivo único para evitar colisiones
-        original_filename, file_extension = os.path.splitext(file.filename)
-        unique_filename = f"{original_filename}_{uuid.uuid4().hex[:8]}{file_extension}"
-        
-        file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+        if file and allowed_file(file.filename):
+            original_filename = secure_filename(file.filename) # Limpia el nombre del archivo para seguridad
 
-        try:
-            file.save(file_path)
-            uploaded_file_names.append(file.filename) # Reporta el nombre original
-            print(f"Archivo '{file.filename}' subido exitosamente como '{unique_filename}'")
-        except Exception as e:
-            failed_file_names.append(f"{file.filename} (Error: {str(e)})")
-            print(f"Error al subir el archivo '{file.filename}': {str(e)}")
+            # Generar un nombre de archivo único para evitar colisiones
+            name, ext = os.path.splitext(original_filename)
+            unique_filename = f"{name}_{uuid.uuid4().hex[:8]}{ext}" # Ejemplo: "mi_foto_abcdefgh.jpg"
+
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+
+            try:
+                file.save(filepath)
+                uploaded_file_names.append(original_filename)
+                print(f"[{os.path.basename(__file__)}] Saved: {unique_filename}")
+            except Exception as e:
+                failed_file_names.append(f"{original_filename} (Error: {str(e)})")
+                print(f"[{os.path.basename(__file__)}] Error saving {original_filename}: {str(e)}")
+        else:
+            failed_file_names.append(f"{file.filename} (Error: Tipo de archivo no permitido o nombre inválido.)")
+            print(f"[{os.path.basename(__file__)}] File not allowed: {file.filename}")
 
     if uploaded_file_names and not failed_file_names:
-        return {'message': 'Todos los archivos se subieron correctamente.', 'uploaded': uploaded_file_names}, 200
+        print(f"[{os.path.basename(__file__)}] All files uploaded successfully. Count: {len(uploaded_file_names)}")
+        return jsonify({"message": "Todos los archivos se subieron correctamente.", "uploaded": uploaded_file_names}), 200
     elif uploaded_file_names and failed_file_names:
-        return {'message': 'Algunos archivos subidos correctamente, otros fallaron.', 'uploaded': uploaded_file_names, 'failed': failed_file_names}, 206
+        print(f"[{os.path.basename(__file__)}] Some files uploaded, some failed. Uploaded: {len(uploaded_file_names)}, Failed: {len(failed_file_names)}")
+        return jsonify({
+            "message": "Algunos archivos subidos correctamente, otros fallaron.",
+            "uploaded": uploaded_file_names,
+            "failed": failed_file_names
+        }), 206 # Partial Content
     else:
-        return {'message': 'Ningún archivo pudo ser subido.', 'failed': failed_file_names}, 500
+        print(f"[{os.path.basename(__file__)}] No files could be uploaded.")
+        return jsonify({"message": "Ningún archivo pudo ser subido.", "failed": failed_file_names}), 500
 
-# -----------------------------------------------------------
-# Endpoint para listar todos los archivos subidos
-# El frontend GETeará a http://<tu_ip>:5000/Upload/list
-# -----------------------------------------------------------
-@app.route('/Upload/list')
+# RUTA: Para listar todos los archivos subidos (ENDPOINT: /list-files)
+@app.route('/list-files', methods=['GET'])
 def list_files():
+    print(f"[{os.path.basename(__file__)}] Received GET /list-files request.")
+    files = []
     try:
-        files_in_upload_folder = [f for f in os.listdir(UPLOAD_FOLDER) if os.path.isfile(os.path.join(UPLOAD_FOLDER, f))]
-        return files_in_upload_folder, 200
+        # os.listdir(app.config['UPLOAD_FOLDER']) lista los nombres de archivos dentro de la carpeta 'uploads'
+        for filename in os.listdir(app.config['UPLOAD_FOLDER']):
+            if allowed_file(filename): # Filtra por extensiones permitidas si deseas
+                files.append(filename)
+        print(f"[{os.path.basename(__file__)}] Found {len(files)} files in uploads folder.")
+    except FileNotFoundError:
+        print(f"[{os.path.basename(__file__)}] Uploads folder not found: {app.config['UPLOAD_FOLDER']}")
+        return jsonify({"message": "Carpeta de subidas no encontrada."}), 404
     except Exception as e:
-        print(f"Error al listar archivos: {str(e)}")
-        return {'message': f"Error al listar archivos: {str(e)}"}, 500
+        print(f"[{os.path.basename(__file__)}] Error listing files: {str(e)}")
+        return jsonify({"message": f"Error al listar archivos: {str(e)}"}), 500
 
-# -----------------------------------------------------------
-# Endpoint para servir un archivo específico
-# El frontend GETeará a http://<tu_ip>:5000/Upload/files/<nombre_archivo>
-# -----------------------------------------------------------
-@app.route('/Upload/files/<filename>')
+    return jsonify(files), 200
+
+# RUTA: Para servir archivos estáticos desde la carpeta 'uploads' (ENDPOINT: /uploads/<nombre_archivo>)
+@app.route('/uploads/<path:filename>')
 def serve_uploaded_file(filename):
-    # send_from_directory es seguro y busca el archivo dentro de la carpeta especificada
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    print(f"[{os.path.basename(__file__)}] Serving uploaded file: {filename}")
+    # send_from_directory maneja la seguridad y los tipos MIME automáticamente
+    # Sirve el archivo desde la carpeta 'uploads'
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+# --- RUTAS DE SERVICIO WEB (para probar localmente si quieres) ---
+# RUTA: Para servir index.html por defecto cuando acceden a la raíz (ENDPOINT: /)
+@app.route('/')
+def index():
+    print(f"[{os.path.basename(__file__)}] Root path accessed (serving index.html).")
+    # Asume que index.html está en el mismo directorio que server.py
+    return send_from_directory(base_dir, 'index.html')
+
 
 if __name__ == '__main__':
-    # Obtener la IP local de la máquina
-    import socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80)) # Conectar a una IP externa (Google DNS) para obtener la IP de la interfaz activa
-    local_ip = s.getsockname()[0]
-    s.close()
-
-    port = 5000 # Puedes cambiar el puerto si lo necesitas, pero asegúrate de actualizar el JS
-
-    print(f"==================================================")
-    print(f"Servidor Python Flask iniciado.")
-    print(f"Accede a tu galería desde tu navegador/celular en:")
-    print(f"  http://{local_ip}:{port}/")
-    print(f"  (o http://127.0.0.1:{port}/ si estás en la misma máquina)")
-    print(f"Los archivos se guardarán en la carpeta: {os.path.abspath(UPLOAD_FOLDER)}")
-    print(f"Presiona Ctrl+C para detener el servidor.")
-    print(f"==================================================")
-
-    # Ejecuta la aplicación Flask
-    # host='0.0.0.0' hace que sea accesible desde cualquier IP en tu red local.
-    app.run(host='0.0.0.0', port=port, debug=True) # debug=True para ver errores en la consola
+    print("==================================================")
+    print("Servidor Python Flask iniciado.")
+    print("Accede a tu galería desde tu navegador/celular en:")
+    print(f"  http://192.168.0.14:5000/") # Usando tu IP local
+    print(f"  (o http://127.0.0.1:5000/ si estás en la misma máquina)")
+    print(f"Los archivos se guardarán en la carpeta: {full_upload_path}")
+    print("Presiona Ctrl+C para detener el servidor.")
+    print("==================================================")
+    # La IP 0.0.0.0 permite que el servidor sea accesible desde otras máquinas en la misma red.
+    # El puerto 5000 es el que ahora estamos usando (coincidiendo con tu última salida de Flask).
+    # debug=True es útil para desarrollo, muestra errores detallados y recarga el servidor al guardar cambios.
+    app.run(host='0.0.0.0', port=5000, debug=True)

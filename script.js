@@ -1,19 +1,17 @@
-// La IP del servidor Python.
-// ¡Asegúrate que este puerto y las rutas coincidan con tu server.py!
-const serverIp = "http://192.168.0.14:5000"; // <--- CAMBIADO: Puerto a 5000
+const serverIp = "http://192.168.0.14:5000"; // <--- ¡Importante! PUERTO 5000 y tu IP Local
 
 // Función para cargar y mostrar archivos desde el servidor
 async function loadGalleryImages() {
   try {
-    // CAMBIADO: La ruta para listar ahora es /Upload/list
-    const response = await fetch(`${serverIp}/Upload/list`);
+    // Endpoint para listar archivos en Flask: /list-files
+    const response = await fetch(`${serverIp}/list-files`);
     if (!response.ok) {
       throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
     }
     const files = await response.json();
 
     const gallery = $("#gallery");
-    gallery.empty();
+    gallery.empty(); // Limpiar la galería antes de añadir nuevos elementos
 
     if (files.length === 0) {
       gallery.append('<p class="text-center text-muted">No hay fotos o videos subidos aún.</p>');
@@ -39,14 +37,16 @@ async function loadGalleryImages() {
           tag = 'video';
           break;
         default:
-          isMedia = false;
+          isMedia = false; // No es un tipo de medio que queremos previsualizar directamente
           break;
       }
 
       if (isMedia) {
+        // Endpoint para servir archivos en Flask: /uploads/nombre_archivo
         const content = `
           <div class="col-6 col-md-4">
-            <${tag} src="${serverIp}/Upload/files/${fileName}" controls class="w-100"></${tag}> <p class="text-center text-muted small mt-1">${fileName}</p>
+            <<span class="math-inline">\{tag\} src\="</span>{serverIp}/uploads/<span class="math-inline">\{fileName\}" controls class\="w\-100"\></</span>{tag}>
+            <p class="text-center text-muted small mt-1">${fileName}</p>
           </div>
         `;
         gallery.append(content);
@@ -79,7 +79,7 @@ $("#uploadForm").on("submit", async function (e) {
       const ext = file.type.startsWith("video") ? "video" : "img";
       const content = `
         <div class="col-6 col-md-4">
-          <${ext} src="${e.target.result}" controls class="w-100"></${ext}>
+          <<span class="math-inline">\{ext\} src\="</span>{e.target.result}" controls class="w-100"></${ext}>
           <p class="text-center text-muted small mt-1">Previsualización: ${file.name}</p>
         </div>
       `;
@@ -91,12 +91,12 @@ $("#uploadForm").on("submit", async function (e) {
 
   const formData = new FormData();
   for (let i = 0; i < files.length; i++) {
-    formData.append("files", files[i]);
+    formData.append("files", files[i]); // El nombre del campo "files" debe coincidir con el backend de Flask
   }
 
   try {
-    // CAMBIADO: La ruta para subir ahora es /uploadMultiple
-    const response = await fetch(`${serverIp}/uploadMultiple`, {
+    // Endpoint para subir archivos en Flask: /upload-files
+    const response = await fetch(`${serverIp}/upload-files`, {
       method: "POST",
       body: formData,
     });
@@ -114,7 +114,7 @@ $("#uploadForm").on("submit", async function (e) {
         alert(`Hubo problemas al subir los siguientes archivos: ${result.failed.join(', ')}`);
       }
 
-      await loadGalleryImages();
+      await loadGalleryImages(); // Recargar la galería después de la subida
 
     } else {
       const errorText = await response.text();
@@ -128,5 +128,5 @@ $("#uploadForm").on("submit", async function (e) {
 });
 
 $(document).ready(function() {
-  loadGalleryImages();
+  loadGalleryImages(); // Cargar la galería al iniciar la página
 });
