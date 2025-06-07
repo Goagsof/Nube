@@ -27,7 +27,7 @@ $("#uploadForm").on("submit", async function (e) {
 
     // Subida al servidor ASP.NET
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("files", file);
 
     try {
       const response = await fetch(`${serverIp}/Upload/upload`, {
