@@ -1,4 +1,4 @@
-const serverIp = "http://192.168.0.14:5000"; // <--- ¡Importante! PUERTO 5000 y tu IP Local
+const serverIp = "https://192.168.0.14:5000";// <--- ¡Importante! PUERTO 5000 y tu IP Local
 
 // Función para cargar y mostrar archivos desde el servidor
 async function loadGalleryImages() {

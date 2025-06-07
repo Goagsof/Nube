@@ -133,4 +133,4 @@ if __name__ == '__main__':
     # La IP 0.0.0.0 permite que el servidor sea accesible desde otras máquinas en la misma red.
     # El puerto 5000 es el que ahora estamos usando (coincidiendo con tu última salida de Flask).
     # debug=True es útil para desarrollo, muestra errores detallados y recarga el servidor al guardar cambios.
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, ssl_context='adhoc')
